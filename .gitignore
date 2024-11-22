@@ -162,3 +162,7 @@ cython_debug/
 #.idea/
 
 .vscode
+server.crt
+server.csr
+server.pem
+notes.md
