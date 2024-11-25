@@ -49,18 +49,19 @@ CALLBACK_URI_HOST = os.getenv("CALLBACK_URI_HOST")
 CALLBACK_EVENTS_URI = CALLBACK_URI_HOST + "/api/callbacks"
 
 ANSWER_PROMPT_SYSTEM_TEMPLATE = """ 
-    You are an assistant designed to answer the customer query and analyze the sentiment score from the customer tone. 
-    You also need to determine the intent of the customer query and classify it into categories such as sales, marketing, shopping, etc.
+    You are an assistant designed to write an autobiography and analyze the sentiment score from the user's tone. 
     Use a scale of 1-10 (10 being highest) to rate the sentiment score. 
+    Assess if the provided response is complete or if more information is needed.
     Use the below format, replacing the text in brackets with the result. Do not include the brackets in the output: 
-    Content:[Answer the customer query briefly and clearly in two lines and ask if there is anything else you can help with] 
+    Content:[Summaries the users response very shortly to show you have heard and understood everything correctly in an empathetic tone.] 
     Score:[Sentiment score of the customer tone] 
-    Intent:[Determine the intent of the customer query] 
-    Category:[Classify the intent into one of the categories]
+    Completeness:[Follow-up question or statement to continue the conversation]
     """
 
-HELLO_PROMPT = "Hello, thank you for calling! How can I help you today?"
-TIMEOUT_SILENCE_PROMPT = "I am sorry, I did not hear anything. If you need assistance, please let me know how I can help you,"
+HELLO_PROMPT = "Hello! I'm here to help you document your autobiography. Let's start with some basic information. Can you tell me your full name and where you were born?"
+TIMEOUT_SILENCE_PROMPT = (
+    "I am sorry, I did not hear anything. Could you please repeat that?"
+)
 GOODBYE_PROMPT = (
     "Thank you for calling! I hope I was able to assist you. Have a great day!"
 )
@@ -75,9 +76,7 @@ TRANSFER_FAILED_CONTEXT = "TransferFailed"
 CONNECT_AGENT_CONTEXT = "ConnectAgent"
 GOODBYE_CONTEXT = "Goodbye"
 
-CHAT_RESPONSE_EXTRACT_PATTERN = (
-    r"\s*Content:(.*)\s*Score:(.*\d+)\s*Intent:(.*)\s*Category:(.*)"
-)
+CHAT_RESPONSE_EXTRACT_PATTERN = r"\s*Content:(.*)\s*Score:(.*\d+)\s*Completeness:(.*)"
 
 call_automation_client = CallAutomationClient.from_connection_string(
     ACS_CONNECTION_STRING
@@ -134,7 +133,7 @@ async def get_chat_gpt_response(speech_input):
 
 
 async def handle_recognize(replyText, callerId, call_connection_id, context=""):
-    play_source = TextSource(text=replyText, voice_name="en-US-NancyNeural")
+    play_source = TextSource(text=replyText, voice_name="en-GB-AdaMultilingualNeural")
     connection_client = call_automation_client.get_call_connection(call_connection_id)
     try:
         recognize_result = await connection_client.start_recognizing_media(
@@ -150,7 +149,9 @@ async def handle_recognize(replyText, callerId, call_connection_id, context=""):
 
 
 async def handle_play(call_connection_id, text_to_play, context):
-    play_source = TextSource(text=text_to_play, voice_name="en-US-NancyNeural")
+    play_source = TextSource(
+        text=text_to_play, voice_name="en-GB-AdaMultilingualNeural"
+    )
     await call_automation_client.get_call_connection(
         call_connection_id
     ).play_media_to_all(play_source, operation_context=context)
