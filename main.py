@@ -55,7 +55,7 @@ ANSWER_PROMPT_SYSTEM_TEMPLATE = """
     Use the below format, replacing the text in brackets with the result. Do not include the brackets in the output: 
     Content:[Summaries the users response very shortly to show you have heard and understood everything correctly in an empathetic tone.] 
     Score:[Sentiment score of the customer tone] 
-    Completeness:[Follow-up question or statement to continue the conversation]
+    Follow-up:[Follow-up question to continue the conversation about the autobiography.]
     """
 
 HELLO_PROMPT = "Hello! I'm here to help you document your autobiography. Let's start with some basic information. Can you tell me your full name and where you were born?"
@@ -76,7 +76,7 @@ TRANSFER_FAILED_CONTEXT = "TransferFailed"
 CONNECT_AGENT_CONTEXT = "ConnectAgent"
 GOODBYE_CONTEXT = "Goodbye"
 
-CHAT_RESPONSE_EXTRACT_PATTERN = r"\s*Content:(.*)\s*Score:(.*\d+)\s*Completeness:(.*)"
+CHAT_RESPONSE_EXTRACT_PATTERN = r"\s*Content:(.*)\s*Score:(.*\d+)\s*Follow\-up:(.*)"
 
 call_automation_client = CallAutomationClient.from_connection_string(
     ACS_CONNECTION_STRING
@@ -122,7 +122,7 @@ async def get_chat_completions_async(system_prompt, user_prompt):
 
     # Extract the response content
     if response is not None:
-        response_content = response["choices"][0]["message"]["content"]
+        response_content = response["choices"][0]["message"]["follow_up"]
     else:
         response_content = ""
     return response_content
@@ -133,7 +133,7 @@ async def get_chat_gpt_response(speech_input):
 
 
 async def handle_recognize(replyText, callerId, call_connection_id, context=""):
-    play_source = TextSource(text=replyText, voice_name="en-GB-AdaMultilingualNeural")
+    play_source = TextSource(text=replyText, voice_name="en-US-NancyNeural")
     connection_client = call_automation_client.get_call_connection(call_connection_id)
     try:
         recognize_result = await connection_client.start_recognizing_media(
@@ -149,9 +149,7 @@ async def handle_recognize(replyText, callerId, call_connection_id, context=""):
 
 
 async def handle_play(call_connection_id, text_to_play, context):
-    play_source = TextSource(
-        text=text_to_play, voice_name="en-GB-AdaMultilingualNeural"
-    )
+    play_source = TextSource(text=text_to_play, voice_name="en-US-NancyNeural")
     await call_automation_client.get_call_connection(
         call_connection_id
     ).play_media_to_all(play_source, operation_context=context)
@@ -285,12 +283,11 @@ async def handle_callback(contextId):
                             regex = re.compile(CHAT_RESPONSE_EXTRACT_PATTERN)
                             match = regex.search(chat_gpt_response)
                             if match:
-                                answer = match.group(1)
+                                content = match.group(1)
                                 sentiment_score = match.group(2).strip()
-                                intent = match.group(3)
-                                category = match.group(4)
+                                follow_up = match.group(3)
                                 app.logger.info(
-                                    f"Chat GPT Answer={answer}, Sentiment Rating={sentiment_score}, Intent={intent}, Category={category}"
+                                    f"Chat GPT Answer={answer}, Sentiment Rating={sentiment_score}, Follow-up={follow_up}"
                                 )
                                 score = get_sentiment_score(sentiment_score)
                                 app.logger.info(f"Score={score}")
