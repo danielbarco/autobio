@@ -53,12 +53,12 @@ ANSWER_PROMPT_SYSTEM_TEMPLATE = """
     Use a scale of 1-10 (10 being highest) to rate the sentiment score. 
     Assess if the provided response is complete or if more information is needed.
     Use the below format, replacing the text in brackets with the result. Do not include the brackets in the output: 
-    Content:[Summaries the users response very shortly to show you have heard and understood everything correctly in an empathetic tone.] 
+    Content:[Summaries the users response.] 
     Score:[Sentiment score of the customer tone] 
-    Follow-up:[Follow-up question to continue the conversation about the autobiography.]
+    FollowUp:[Follow-up question to continue the conversation about the autobiography.]
     """
 
-HELLO_PROMPT = "Hello! I'm here to help you document your autobiography. Let's start with some basic information. Can you tell me your full name and where you were born?"
+HELLO_PROMPT = "Hello. I'm here to help you document your autobiography. Let's start at the beginning. Which year and country where you born in?"
 TIMEOUT_SILENCE_PROMPT = (
     "I am sorry, I did not hear anything. Could you please repeat that?"
 )
@@ -76,7 +76,7 @@ TRANSFER_FAILED_CONTEXT = "TransferFailed"
 CONNECT_AGENT_CONTEXT = "ConnectAgent"
 GOODBYE_CONTEXT = "Goodbye"
 
-CHAT_RESPONSE_EXTRACT_PATTERN = r"\s*Content:(.*)\s*Score:(.*\d+)\s*Follow\-up:(.*)"
+CHAT_RESPONSE_EXTRACT_PATTERN = r"\s*Content:(.*)\s*Score:(.*\d+)\s*FollowUp:(.*)"
 
 call_automation_client = CallAutomationClient.from_connection_string(
     ACS_CONNECTION_STRING
@@ -105,7 +105,7 @@ async def get_chat_completions_async(system_prompt, user_prompt):
         {"role": "system", "content": f"{system_prompt}"},
         {
             "role": "user",
-            "content": f"In less than 200 characters: respond to this question: {user_prompt}?",
+            "content": f"In less than 200 characters: follow-up this conversation to complete the autobiography: {user_prompt}?",
         },
     ]
 
@@ -122,7 +122,7 @@ async def get_chat_completions_async(system_prompt, user_prompt):
 
     # Extract the response content
     if response is not None:
-        response_content = response["choices"][0]["message"]["follow_up"]
+        response_content = response["choices"][0]["message"]["content"]
     else:
         response_content = ""
     return response_content
@@ -268,54 +268,52 @@ async def handle_callback(contextId):
                         "Recognition completed, speech_text =%s", speech_text
                     )
                     if speech_text is not None and len(speech_text) > 0:
-                        detect_escalate = await detect_escalate_to_agent_intent(
-                            speech_text=speech_text, logger=app.logger
-                        )
-                        if detect_escalate:
-                            await handle_play(
-                                call_connection_id=event.data["callConnectionId"],
-                                text_to_play=END_CALL_PHRASE_TO_CONNECT_AGENT,
-                                context=CONNECT_AGENT_CONTEXT,
+                        # detect_escalate = await detect_escalate_to_agent_intent(
+                        #     speech_text=speech_text, logger=app.logger
+                        # )
+                        # if detect_escalate:
+                        #     await handle_play(
+                        #         call_connection_id=event.data["callConnectionId"],
+                        #         text_to_play=END_CALL_PHRASE_TO_CONNECT_AGENT,
+                        #         context=CONNECT_AGENT_CONTEXT,
+                        #     )
+                        # else:
+                        chat_gpt_response = await get_chat_gpt_response(speech_text)
+                        app.logger.info(f"Chat GPT response:{chat_gpt_response}")
+                        regex = re.compile(CHAT_RESPONSE_EXTRACT_PATTERN)
+                        match = regex.search(chat_gpt_response)
+                        if match:
+                            content = match.group(1)
+                            sentiment_score = match.group(2).strip()
+                            follow_up = match.group(3)
+                            app.logger.info(
+                                f"Chat GPT Answer={content}, Sentiment Rating={sentiment_score}, FollowUp={follow_up}"
                             )
-                        else:
-                            chat_gpt_response = await get_chat_gpt_response(speech_text)
-                            app.logger.info(f"Chat GPT response:{chat_gpt_response}")
-                            regex = re.compile(CHAT_RESPONSE_EXTRACT_PATTERN)
-                            match = regex.search(chat_gpt_response)
-                            if match:
-                                content = match.group(1)
-                                sentiment_score = match.group(2).strip()
-                                follow_up = match.group(3)
-                                app.logger.info(
-                                    f"Chat GPT Answer={answer}, Sentiment Rating={sentiment_score}, Follow-up={follow_up}"
+                            score = get_sentiment_score(sentiment_score)
+                            app.logger.info(f"Score={score}")
+                            if -1 < score < 5:
+                                app.logger.info(f"Score is less than 5")
+                                await handle_play(
+                                    call_connection_id=event.data["callConnectionId"],
+                                    text_to_play=CONNECT_AGENT_PROMPT,
+                                    context=CONNECT_AGENT_CONTEXT,
                                 )
-                                score = get_sentiment_score(sentiment_score)
-                                app.logger.info(f"Score={score}")
-                                if -1 < score < 5:
-                                    app.logger.info(f"Score is less than 5")
-                                    await handle_play(
-                                        call_connection_id=event.data[
-                                            "callConnectionId"
-                                        ],
-                                        text_to_play=CONNECT_AGENT_PROMPT,
-                                        context=CONNECT_AGENT_CONTEXT,
-                                    )
-                                else:
-                                    app.logger.info(f"Score is more than 5")
-                                    await handle_recognize(
-                                        answer,
-                                        caller_id,
-                                        event.data["callConnectionId"],
-                                        context="OpenAISample",
-                                    )
                             else:
-                                app.logger.info("No match found")
+                                app.logger.info(f"Score is more than 5")
                                 await handle_recognize(
-                                    chat_gpt_response,
+                                    follow_up,
                                     caller_id,
                                     event.data["callConnectionId"],
                                     context="OpenAISample",
                                 )
+                        else:
+                            app.logger.info("No match found")
+                            await handle_recognize(
+                                chat_gpt_response,
+                                caller_id,
+                                event.data["callConnectionId"],
+                                context="OpenAISample",
+                            )
             elif event.type == "Microsoft.Communication.RecognizeFailed":
                 resultInformation = event.data["resultInformation"]
                 reasonCode = resultInformation["subCode"]
