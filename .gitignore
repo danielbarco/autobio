@@ -166,3 +166,5 @@ server.crt
 server.csr
 server.pem
 notes.md
+*.mp3
+*.env
